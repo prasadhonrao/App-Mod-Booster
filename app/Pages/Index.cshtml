@@ -1,0 +1,257 @@
+@page
+@model ExpenseMgmt.Pages.IndexModel
+@{
+    ViewData["Title"] = "Expense Management";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Expense Management</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; color: #333; }
+        .header { background: #1a56db; color: white; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+        .header h1 { font-size: 1.4rem; }
+        .error-bar { background: #fde8e8; border-left: 4px solid #e02424; color: #c81e1e; padding: 0.8rem 2rem; font-size: 0.9rem; display: @(Model.ErrorMessage != null ? "block" : "none"); }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .btn { padding: 0.5rem 1.2rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; text-decoration: none; display: inline-block; }
+        .btn-primary { background: #1a56db; color: white; }
+        .btn-success { background: #057a55; color: white; }
+        .btn-danger { background: #e02424; color: white; }
+        .btn-secondary { background: #6b7280; color: white; }
+        .filters { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; align-items: center; }
+        .filters select, .filters input { padding: 0.4rem 0.8rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; }
+        table { width: 100%; background: white; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); border-collapse: collapse; overflow: hidden; }
+        th { background: #f9fafb; padding: 0.75rem 1rem; text-align: left; font-size: 0.8rem; text-transform: uppercase; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; font-size: 0.9rem; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f9fafb; }
+        .badge { padding: 0.2rem 0.7rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
+        .badge-draft { background: #e5e7eb; color: #374151; }
+        .badge-submitted { background: #dbeafe; color: #1e40af; }
+        .badge-approved { background: #d1fae5; color: #065f46; }
+        .badge-rejected { background: #fde8e8; color: #9b1c1c; }
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 10px; padding: 2rem; width: 100%; max-width: 480px; }
+        .modal h2 { margin-bottom: 1.2rem; font-size: 1.1rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.3rem; font-size: 0.85rem; color: #374151; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; }
+        .modal-actions { display: flex; gap: 0.8rem; justify-content: flex-end; margin-top: 1.2rem; }
+        .chat-fab { position: fixed; bottom: 2rem; right: 2rem; width: 56px; height: 56px; background: #1a56db; color: white; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>💼 Expense Management</h1>
+        <span style="font-size:0.85rem;opacity:0.8">Modern Expense Tracker</span>
+    </div>
+
+    @if (Model.ErrorMessage != null)
+    {
+        <div class="error-bar">
+            <strong>⚠️ Database connection issue:</strong> @Model.ErrorMessage
+            <br/><small>Showing sample data. Fix: ensure AZURE_CLIENT_ID is set in App Service config and the managed identity has db_datareader/db_datawriter/EXECUTE roles in the database.</small>
+        </div>
+    }
+
+    <div class="container">
+        <div class="actions">
+            <button class="btn btn-primary" onclick="openModal('createModal')">+ New Expense</button>
+            <a class="btn btn-secondary" href="/swagger" target="_blank">API Docs (Swagger)</a>
+            <a class="btn btn-secondary" href="/chatui/index.html" target="_blank">🤖 AI Chat</a>
+        </div>
+
+        <div class="filters">
+            <label>Filter by status:</label>
+            <select id="statusFilter" onchange="applyFilters()">
+                <option value="">All Statuses</option>
+                <option>Draft</option>
+                <option>Submitted</option>
+                <option>Approved</option>
+                <option>Rejected</option>
+            </select>
+            <label>User ID:</label>
+            <input type="number" id="userIdFilter" placeholder="All users" style="width:120px" onchange="applyFilters()" />
+        </div>
+
+        <table id="expensesTable">
+            <thead>
+                <tr>
+                    <th>ID</th><th>User</th><th>Category</th><th>Amount (GBP)</th>
+                    <th>Date</th><th>Description</th><th>Status</th><th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="expensesBody">
+                <tr><td colspan="8" style="text-align:center;color:#9ca3af;">Loading expenses...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Create Expense Modal -->
+    <div class="modal-overlay" id="createModal">
+        <div class="modal">
+            <h2>New Expense</h2>
+            <div class="form-group">
+                <label>User</label>
+                <select id="newUserId"></select>
+            </div>
+            <div class="form-group">
+                <label>Category</label>
+                <select id="newCategoryId"></select>
+            </div>
+            <div class="form-group">
+                <label>Amount (£)</label>
+                <input type="number" id="newAmount" step="0.01" placeholder="e.g. 25.50" />
+            </div>
+            <div class="form-group">
+                <label>Date</label>
+                <input type="date" id="newDate" />
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="newDescription" rows="3"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="createExpense()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approve/Reject Modal -->
+    <div class="modal-overlay" id="reviewModal">
+        <div class="modal">
+            <h2 id="reviewTitle">Review Expense</h2>
+            <input type="hidden" id="reviewExpenseId" />
+            <div class="form-group">
+                <label>Reviewed by (User ID)</label>
+                <input type="number" id="reviewedBy" value="2" />
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('reviewModal')">Cancel</button>
+                <button class="btn btn-success" onclick="updateStatus(3)">Approve</button>
+                <button class="btn btn-danger" onclick="updateStatus(4)">Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FAB Chat Button -->
+    <button class="chat-fab" onclick="window.open('/chatui/index.html','_blank')" title="Open AI Chat">🤖</button>
+
+    <script>
+        let statusMap = { 1:'draft', 2:'submitted', 3:'approved', 4:'rejected' };
+
+        async function loadExpenses(status='', userId='') {
+            let url = '/api/expenses';
+            const params = new URLSearchParams();
+            if (status) params.set('status', status);
+            if (userId) params.set('userId', userId);
+            if (params.toString()) url += '?' + params.toString();
+            const res = await fetch(url);
+            const data = await res.json();
+            const expenses = data.isDummyData ? data.data : data;
+            if (data.isDummyData) showErrorBanner(data.error);
+            const tbody = document.getElementById('expensesBody');
+            if (!expenses.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;">No expenses found.</td></tr>'; return; }
+            tbody.innerHTML = expenses.map(e => `
+                <tr>
+                    <td>${e.expenseId}</td>
+                    <td>${e.userName}</td>
+                    <td>${e.categoryName}</td>
+                    <td>\u00a3${(e.amountMinor/100).toFixed(2)}</td>
+                    <td>${e.expenseDate?.substring(0,10)}</td>
+                    <td>${e.description || '-'}</td>
+                    <td><span class="badge badge-${statusMap[e.statusId] || 'draft'}">${e.statusName}</span></td>
+                    <td style="display:flex;gap:0.3rem;flex-wrap:wrap">
+                        ${e.statusId === 1 ? `<button class="btn btn-primary" style="padding:0.2rem 0.6rem;font-size:0.8rem" onclick="submitExpense(${e.expenseId})">Submit</button>` : ''}
+                        ${e.statusId === 2 ? `<button class="btn btn-success" style="padding:0.2rem 0.6rem;font-size:0.8rem" onclick="openReview(${e.expenseId})">Review</button>` : ''}
+                        <button class="btn btn-danger" style="padding:0.2rem 0.6rem;font-size:0.8rem" onclick="deleteExpense(${e.expenseId})">Delete</button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        async function loadUsers() {
+            const res = await fetch('/api/users');
+            const data = await res.json();
+            const users = data.isDummyData ? data.data : data;
+            const sel = document.getElementById('newUserId');
+            sel.innerHTML = users.map(u => `<option value="${u.userId}">${u.userName}</option>`).join('');
+        }
+
+        async function loadCategories() {
+            const res = await fetch('/api/categories');
+            const data = await res.json();
+            const cats = data.isDummyData ? data.data : data;
+            const sel = document.getElementById('newCategoryId');
+            sel.innerHTML = cats.map(c => `<option value="${c.categoryId}">${c.categoryName}</option>`).join('');
+        }
+
+        function applyFilters() {
+            const status = document.getElementById('statusFilter').value;
+            const userId = document.getElementById('userIdFilter').value;
+            loadExpenses(status, userId);
+        }
+
+        function openModal(id) { document.getElementById(id).classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        function openReview(expenseId) {
+            document.getElementById('reviewExpenseId').value = expenseId;
+            document.getElementById('reviewTitle').textContent = `Review Expense #${expenseId}`;
+            openModal('reviewModal');
+        }
+
+        async function createExpense() {
+            const userId = parseInt(document.getElementById('newUserId').value);
+            const categoryId = parseInt(document.getElementById('newCategoryId').value);
+            const amountGBP = parseFloat(document.getElementById('newAmount').value);
+            const expenseDate = document.getElementById('newDate').value;
+            const description = document.getElementById('newDescription').value;
+            if (!amountGBP || !expenseDate) { alert('Amount and date are required'); return; }
+            await fetch('/api/expenses', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ userId, categoryId, amountMinor: Math.round(amountGBP * 100), expenseDate, description })
+            });
+            closeModal('createModal');
+            loadExpenses();
+        }
+
+        async function submitExpense(id) {
+            await fetch(`/api/expenses/${id}/submit`, { method: 'POST' });
+            loadExpenses();
+        }
+
+        async function updateStatus(statusId) {
+            const expenseId = document.getElementById('reviewExpenseId').value;
+            const reviewedBy = parseInt(document.getElementById('reviewedBy').value);
+            await fetch(`/api/expenses/${expenseId}/status`, {
+                method: 'PATCH', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ statusId, reviewedBy })
+            });
+            closeModal('reviewModal');
+            loadExpenses();
+        }
+
+        async function deleteExpense(id) {
+            if (!confirm(`Delete expense #${id}?`)) return;
+            await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+            loadExpenses();
+        }
+
+        function showErrorBanner(msg) {
+            const bar = document.querySelector('.error-bar');
+            if (bar) { bar.style.display = 'block'; bar.querySelector('strong').nextSibling.textContent = ' ' + msg; }
+        }
+
+        loadExpenses();
+        loadUsers();
+        loadCategories();
+    </script>
+</body>
+</html>
