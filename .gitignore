@@ -1,0 +1,13 @@
+# .gitignore
+*.user
+.DS_Store
+[Bb]in/
+[Oo]bj/
+*.suo
+*.user
+*.userosscache
+*.userprefs
+.vs/
+
+# Keep app.zip for deployment
+!app.zip
