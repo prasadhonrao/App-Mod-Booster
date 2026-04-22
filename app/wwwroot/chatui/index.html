@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Expense AI Assistant</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; display: flex; flex-direction: column; height: 100vh; }
+        .chat-header { background: #1a56db; color: white; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 0.8rem; }
+        .chat-header h2 { font-size: 1.1rem; }
+        .chat-header a { color: rgba(255,255,255,0.8); font-size: 0.85rem; text-decoration: none; margin-left: auto; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+        .message { max-width: 75%; padding: 0.8rem 1rem; border-radius: 12px; font-size: 0.9rem; line-height: 1.5; }
+        .message.user { background: #1a56db; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .message.assistant { background: white; color: #333; align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .message.loading { color: #9ca3af; font-style: italic; }
+        .chat-input-area { background: white; border-top: 1px solid #e5e7eb; padding: 1rem 1.5rem; display: flex; gap: 0.8rem; }
+        .chat-input-area input { flex: 1; padding: 0.6rem 1rem; border: 1px solid #d1d5db; border-radius: 24px; font-size: 0.9rem; outline: none; }
+        .chat-input-area input:focus { border-color: #1a56db; }
+        .chat-input-area button { padding: 0.6rem 1.4rem; background: #1a56db; color: white; border: none; border-radius: 24px; cursor: pointer; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="chat-header">
+        <span style="font-size:1.4rem">🤖</span>
+        <h2>Expense AI Assistant</h2>
+        <a href="/Index">← Back to App</a>
+    </div>
+
+    <div class="chat-messages" id="messages">
+        <div class="message assistant">
+            Hello! I'm your Expense Management AI assistant. I can help you:
+            <ul style="margin-top:0.5rem;padding-left:1.2rem">
+                <li>List and filter expenses</li>
+                <li>Create new expense records</li>
+                <li>Submit expenses for review</li>
+                <li>Answer questions about expense data</li>
+            </ul>
+            <br/>Try asking: <em>"Show me all submitted expenses"</em>
+        </div>
+    </div>
+
+    <div class="chat-input-area">
+        <input type="text" id="userInput" placeholder="Ask about your expenses..." onkeydown="if(event.key==='Enter') sendMessage()" />
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function formatMessage(text) {
+            let escaped = escapeHtml(text);
+            // Bold
+            escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Numbered lists
+            escaped = escaped.replace(/((?:^|\n)\d+\.\s.+)+/g, match => {
+                const items = match.trim().split(/\n(?=\d+\.)/);
+                return '<ol>' + items.map(i => `<li>${i.replace(/^\d+\.\s/,'')}</li>`).join('') + '</ol>';
+            });
+            // Bullet lists
+            escaped = escaped.replace(/((?:^|\n)[\-\*]\s.+)+/g, match => {
+                const items = match.trim().split(/\n(?=[\-\*])/);
+                return '<ul>' + items.map(i => `<li>${i.replace(/^[\-\*]\s/,'')}</li>`).join('') + '</ul>';
+            });
+            // Line breaks
+            escaped = escaped.replace(/\n/g, '<br>');
+            return escaped;
+        }
+
+        function appendMessage(role, content) {
+            const container = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            if (role === 'assistant') {
+                div.innerHTML = formatMessage(content);
+            } else {
+                div.textContent = content;
+            }
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            return div;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            if (!message) return;
+            input.value = '';
+
+            appendMessage('user', message);
+            const loadingDiv = appendMessage('assistant loading', 'Thinking...');
+
+            try {
+                const res = await fetch('/api/chat/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                const data = await res.json();
+                loadingDiv.className = 'message assistant';
+                loadingDiv.innerHTML = formatMessage(data.response || data.error || 'No response received.');
+            } catch (err) {
+                loadingDiv.className = 'message assistant';
+                loadingDiv.innerHTML = formatMessage(`Error: ${err.message}`);
+            }
+            document.getElementById('messages').scrollTop = 999999;
+        }
+    </script>
+</body>
+</html>
